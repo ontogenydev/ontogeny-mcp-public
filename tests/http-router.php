@@ -1,11 +1,9 @@
 <?php
-// Copyright (C) 2026 ONTOGENY
-// SPDX-License-Identifier: GPL-2.0-or-later
 // Local loopback only. No write credential or mail transport; never deploy as a web service.
 require_once __DIR__.'/../src/Server.php';
 use Ontogeny\Mcp\Server;use Ontogeny\Mcp\Backend;
 final class LocalBackend implements Backend {
-public function identity(string $token):?array{return null;}
+public function sendEnabled():bool{return false;}
 public function sign(string $payload):string{throw new LogicException('Disabled');}
 public function reserve(string $credential,string $attempt):string{return 'disabled';}
 public function mail(string $reply,string $subject,string $message):bool{return false;}

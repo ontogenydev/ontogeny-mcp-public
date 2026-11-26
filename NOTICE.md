@@ -1,5 +1,5 @@
-# License and scope
+# ONTOGENY MCP
 
-Copyright (C) 2026 ONTOGENY. The source, configuration examples, documentation and tests in this v0.1.1 reference distribution are licensed under the GNU General Public License, version 2 or (at your option) any later version (GPL-2.0-or-later). See LICENSE. The program is distributed without warranty.
+Copyright (C) 2026 ONTOGENY.
 
-Deployment credentials, private routing configuration, private development history and unrelated ONTOGENY systems are not part of this distribution. No permission to access or administer a deployed ONTOGENY service is granted by the software license.
+SPDX-License-Identifier: GPL-2.0-or-later. See LICENSE for GPL version 2. No warranty. ONTOGENY names and marks identify the upstream project; the software license does not confer trademark rights.

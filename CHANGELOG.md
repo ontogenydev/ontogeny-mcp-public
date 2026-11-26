@@ -1,19 +1,18 @@
 # Changelog
 
-## 0.1.1 — inaugural GPL release
+## 0.2.0 — 2026-11-25
 
-- Replace the aggregate credential index with authoritative independent records.
-- Deny stale-cache authorization, expose legacy orphan records for revocation, and condition expiry cleanup on unchanged record state.
-- Fail closed on credential storage errors and report administrative failure accurately.
-- Keep recipient configuration outside source control; restricted sending is disabled without valid operator configuration.
-- Retain the six-tool contract, signing domain, reservation/quota behavior and mail handoff semantics.
-- License the reviewed public distribution under GPL-2.0-or-later.
+- Public correspondence without registration or manually issued credentials.
+- Automatically issued ten-minute tickets bound to exact subject, message and claimed reply email.
+- Fixed recipient, client-enforced human approval, single-use reservations, source/address/global quotas and global admission cap; fail-closed storage behavior.
+- Unverified reply addresses appear only in the message body.
+- Legacy credentials and tickets no longer authorize transmission; refresh tool discovery for the new `reply_email` argument.
+- Preserve three protocol revisions and all six tools. Production read, negative-send and controlled delivery tests passed; concurrent real-DB audit remains open.
 
-## 0.1.0 — public reference snapshot
+## 0.1.1
 
-- Six original MCP tools and the unchanged v0.1.0 protocol core.
-- Externalized private recipient configuration; restricted sending disabled until configured.
-- Isolated protocol and configuration regression tests.
-- Public documentation, configuration example, and release procedure.
+Credential administration concurrency correction; GPL-2.0-or-later public release and configuration separation.
 
-This snapshot is derived from the deployed pilot, not a claim of byte-identical production source. No production change is implied. Live MCP interoperability and MCP-originated correspondence delivery remain unverified.
+## 0.1.0
+
+Initial restricted pilot.

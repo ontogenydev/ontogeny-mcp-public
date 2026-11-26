@@ -3,15 +3,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /**
  * Plugin Name: ONTOGENY MCP
- * Description: First-party, restricted Model Context Protocol interface for public information and correspondence.
- * Version: 0.1.1
+ * Description: First-party Model Context Protocol interface for public information and correspondence.
+ * Version: 0.2.0
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  * Requires PHP: 8.1
  * Author: ONTOGENY
  */
 if(!defined('ABSPATH'))exit;
-// Optional deployment-only overlay, never included in the public repository or source ZIP.
+// Optional deployment-only overlay, never included in source distributions.
 if(is_file(__DIR__.'/config/local.php'))require_once __DIR__.'/config/local.php';
 require_once __DIR__.'/src/Server.php';
 require_once __DIR__.'/src/WordPressBackend.php';

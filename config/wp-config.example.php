@@ -1,6 +1,6 @@
 <?php
-// Copyright (C) 2026 ONTOGENY
-// SPDX-License-Identifier: GPL-2.0-or-later
-// Example only. Set in wp-config.php or a deployment-only config/local.php.
-// Never commit config/local.php or use the example address for real mail.
+// Example only. Set in private server configuration, not the public source.
+// Do not use the example address for live sending.
 // define('ONTOGENY_MCP_MAIL_RECIPIENT', 'recipient@example.org');
+// Emergency switch; false disables public transmission and preserves reads.
+// define('ONTOGENY_MCP_PUBLIC_SEND_ENABLED', false);
