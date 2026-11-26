@@ -1,5 +1,9 @@
 # Security
 
-Report vulnerabilities privately to contact@ontogenyai.com. Do not publish live credentials, private deployment configuration, signed tickets, or correspondence contents. Do not send unsolicited test mail or exhaust production quotas.
+Report vulnerabilities to [contact@ontogenyai.com](mailto:contact@ontogenyai.com).
 
-The interface has a fixed deployment-owned recipient. Client-enforced approval is required, but the server cannot prove human consent. Claimed reply addresses are not verified identities. Rate limits and single-use reservations reduce abuse; they do not eliminate spam or quota-exhaustion denial of service. Use hosting-layer protection and monitor operations. Set `ONTOGENY_MCP_PUBLIC_SEND_ENABLED` to boolean false to disable sending if necessary.
+Correspondence uses a fixed recipient, expiring draft-bound tickets, single-use reservations and rate limits. Clients must obtain human approval before transmission; reply addresses are not verified identities.
+
+Deployers should configure their own recipient, keep deployment configuration out of source control, and monitor abuse. Rate limits do not eliminate spam or quota-exhaustion risks. Apply hosting-layer protection as appropriate. Set `ONTOGENY_MCP_PUBLIC_SEND_ENABLED` to boolean `false` to disable sending while preserving public reads.
+
+Do not test against the live service without authorization.
