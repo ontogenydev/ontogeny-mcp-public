@@ -1,4 +1,6 @@
 <?php
+// Copyright (C) 2026 ONTOGENY
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Local loopback only. No write credential or mail transport; never deploy as a web service.
 require_once __DIR__.'/../src/Server.php';
 use Ontogeny\Mcp\Server;use Ontogeny\Mcp\Backend;

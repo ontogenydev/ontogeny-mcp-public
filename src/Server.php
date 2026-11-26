@@ -1,4 +1,6 @@
 <?php
+// Copyright (C) 2026 ONTOGENY
+// SPDX-License-Identifier: GPL-2.0-or-later
 namespace Ontogeny\Mcp;
 
 /** JSON-only Streamable HTTP, protocol revision 2025-11-25 (and 2025-06-18). */
@@ -13,7 +15,7 @@ interface Backend {
     public function finish(string $attempt, bool $accepted): void;
 }
 final class Server {
-    public const VERSION = '0.1.0';
+    public const VERSION = '0.1.1';
     public const ENDPOINT = 'https://ontogenyai.com/wp-json/ontogeny-mcp/v1/mcp';
     public const TARGET = 'https://mcp.ontogenyai.com/mcp';
     public const DOCS = 'https://ontogenyai.com/mcp/';

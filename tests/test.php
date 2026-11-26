@@ -1,4 +1,6 @@
 <?php
+// Copyright (C) 2026 ONTOGENY
+// SPDX-License-Identifier: GPL-2.0-or-later
 require_once __DIR__.'/../src/Server.php';
 use Ontogeny\Mcp\Server;use Ontogeny\Mcp\Backend;
 final class Fake implements Backend {
@@ -13,7 +15,7 @@ $b=new Fake();$s=new Server($b);$h=['content-type'=>'application/json','accept'=
 function check(bool $ok,string $label):void{global $n;if(!$ok){fwrite(STDERR,"FAIL $label\n");exit(1);}echo 'PASS '.(++$n)." $label\n";}
 function rpc(string $method,array $p=[],array $headers=[]):array{global $s,$h;return $s->http('POST',$headers+$h,json_encode(['jsonrpc'=>'2.0','id'=>1,'method'=>$method,'params'=>(object)$p]));}
 function calltool(string $name,array $args=[],array $headers=[]):array{$r=rpc('tools/call',['name'=>$name,'arguments'=>(object)$args],$headers);$out=$r['body']['result']??[];return isset($out['content'])?json_decode($out['content'][0]['text'],true):$r['body'];}
-$r=rpc('initialize',['protocolVersion'=>'2025-11-25','capabilities'=>(object)[],'clientInfo'=>(object)['name'=>'test','version'=>'1']]);check($r['body']['result']['serverInfo']['version']==='0.1.0','initialize version');
+$r=rpc('initialize',['protocolVersion'=>'2025-11-25','capabilities'=>(object)[],'clientInfo'=>(object)['name'=>'test','version'=>'1']]);check($r['body']['result']['serverInfo']['version']==='0.1.1','initialize version');
 $r=rpc('initialize',['protocolVersion'=>'2026-07-28','capabilities'=>(object)[],'clientInfo'=>(object)['name'=>'test']]);check($r['body']['result']['protocolVersion']==='2025-11-25','negotiate supported revision');
 $r=$s->http('POST',$h,'{"jsonrpc":"2.0","method":"notifications/initialized"}');check($r['status']===202&&$r['body']===null,'notification empty 202');
 check($s->http('GET',$h,'')['status']===405,'GET no SSE');check($s->http('DELETE',$h,'')['status']===405,'DELETE unsupported');check($s->http('GET',['origin'=>'https://attacker.example'],'')['status']===403,'reject foreign origin');check($s->http('POST',['origin'=>'null']+$h,'{}')['status']===403,'reject null origin');check($s->http('POST',['origin'=>'https://ontogenyai.com']+$h,'{')['status']===400,'parse error');check($s->http('POST',$h,str_repeat('x',32769))['status']===413,'size limit');check($s->http('POST',['content-type'=>'text/plain']+$h,'{}')['status']===415,'content type');check($s->http('POST',['accept'=>'application/json']+$h,'{}')['status']===406,'accept validation');check(rpc('ping',[],['mcp-protocol-version'=>'invalid'])['status']===400,'revision validation');check(rpc('ping')['body']['result'] instanceof stdClass,'ping');check($s->http('POST',$h,'[]')['status']===400,'reject batch');check(rpc('admin/delete')['body']['error']['code']===-32601,'reject administrative method');

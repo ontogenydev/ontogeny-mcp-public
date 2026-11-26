@@ -1,4 +1,6 @@
 <?php
+// Copyright (C) 2026 ONTOGENY
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Isolated configuration tests: no WordPress instance, database, or mail transport.
 require_once __DIR__.'/../src/Server.php';
 require_once __DIR__.'/../src/WordPressBackend.php';
@@ -14,7 +16,13 @@ if($mode==='parent') {
 $modes=['empty'=>'','invalid'=>'not-an-address','newline'=>"recipient@example.org\r\nBcc: other@example.org",'valid'=>'recipient@example.org'];
 if(array_key_exists($mode,$modes))define('ONTOGENY_MCP_MAIL_RECIPIENT',$modes[$mode]);
 function is_email($value){return is_string($value)&&filter_var($value,FILTER_VALIDATE_EMAIL)!==false?$value:false;}
-function get_option($name,$default){return ['email'=>'verified@example.org','expires'=>time()+3600,'verified'=>true];}
+final class FixtureDb {
+    public string $options='fixture_options';
+    public string $last_error='';
+    public function prepare($sql,...$args){return $sql;}
+    public function get_var($sql){return serialize(['email'=>'verified@example.org','expires'=>time()+3600,'verified'=>true]);}
+}
+$wpdb=new FixtureDb();
 function wp_mail($to,$subject,$body,$headers){$GLOBALS['handoffs'][]=[$to,$subject,$body,$headers];return true;}
 function check_config($condition,$label){if(!$condition){fwrite(STDERR,"FAIL $label\n");exit(1);}echo "PASS $label\n";}
 $GLOBALS['handoffs']=[];$b=new WordPressBackend();$enabled=$mode==='valid';

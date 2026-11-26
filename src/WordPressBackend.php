@@ -1,4 +1,6 @@
 <?php
+// Copyright (C) 2026 ONTOGENY
+// SPDX-License-Identifier: GPL-2.0-or-later
 namespace Ontogeny\Mcp;
 final class WordPressBackend implements Backend {
     private const TOKEN_PREFIX='ontogeny_mcp_credential_';
@@ -16,6 +18,26 @@ final class WordPressBackend implements Backend {
         ) $collation;");
         if(!wp_next_scheduled('ontogeny_mcp_cleanup'))wp_schedule_event(time()+3600,'daily','ontogeny_mcp_cleanup');
     }
+    // Existing per-credential option rows are the only authority. Never read the
+    // historical aggregate index or the WordPress option cache for authorization.
+    private static function decodeRecord(string $raw):?array {
+        $r=@unserialize($raw,['allowed_classes'=>false]);
+        if(!is_array($r)||!is_string($r['email']??null)||!is_int($r['expires']??null)
+            ||($r['verified']??null)!==true||!is_email($r['email'])||preg_match('/[\r\n]/',$r['email']))return null;
+        return ['email'=>$r['email'],'expires'=>$r['expires'],'verified'=>true];
+    }
+    private static function key(string $id):string {return self::TOKEN_PREFIX.$id;}
+    private static function invalidate(string $name):void {
+        wp_cache_delete($name,'options');wp_cache_delete('notoptions','options');wp_cache_delete('alloptions','options');
+    }
+    private static function rows():?array {
+        global $wpdb;
+        $rows=$wpdb->get_results($wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name",$wpdb->esc_like(self::TOKEN_PREFIX).'%'),ARRAY_A);
+        if($wpdb->last_error!==''||!is_array($rows))return null;
+        return array_values(array_filter($rows,static function($row){
+            return is_string($row['option_name']??null)&&preg_match('/^'.self::TOKEN_PREFIX.'[a-f0-9]{64}$/D',$row['option_name'])===1&&is_string($row['option_value']??null);
+        }));
+    }
     /** Deployment-owned configuration; a public build must not send by default. */
     private function recipient():?string {
         $value=defined('ONTOGENY_MCP_MAIL_RECIPIENT')?constant('ONTOGENY_MCP_MAIL_RECIPIENT'):null;
@@ -23,10 +45,14 @@ final class WordPressBackend implements Backend {
     }
     public function identity(string $token):?array {
         if($this->recipient()===null)return null;
-        $id=hash('sha256',$token);$record=get_option(self::TOKEN_PREFIX.$id,false);
-        if(!is_array($record)||($record['expires']??0)<=time()||!is_email($record['email']??'')||empty($record['verified']))return null;
+        global $wpdb;$id=hash('sha256',$token);
+        $raw=$wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name=%s",self::key($id)));
+        if($wpdb->last_error!==''||!is_string($raw))return null;
+        $record=self::decodeRecord($raw);
+        if($record===null||$record['expires']<=time())return null;
         return ['id'=>$id,'email'=>$record['email']];
     }
+    // Stable signing domain preserves previously issued draft tickets across this patch.
     public function sign(string $payload):string{return hash_hmac('sha256',$payload,wp_salt('auth').'|ontogeny-mcp-v0.1.0');}
     private function quota(string $key,int $window,int $limit):bool {
         global $wpdb;$t=$this->table();$epoch=intdiv(time(),$window);$bucket=hash('sha256',$key.'|'.$epoch);$expiry=($epoch+1)*$window+86400;
@@ -53,27 +79,55 @@ final class WordPressBackend implements Backend {
     public function finish(string $attempt,bool $accepted):void {global $wpdb;$wpdb->update($this->table(),['state'=>$accepted?'already_accepted':'previous_handoff_failed'],['bucket'=>$attempt]);}
     public static function cleanup():void {
         global $wpdb;$t=$wpdb->prefix.'ontogeny_mcp_limits';$wpdb->query($wpdb->prepare("DELETE FROM $t WHERE expires < %d",time()));
-        $index=get_option('ontogeny_mcp_credentials',[]);if(!is_array($index))return;
-        foreach($index as $id=>$row){if(($row['expires']??0)<=time()){delete_option(self::TOKEN_PREFIX.$id);unset($index[$id]);}}
-        update_option('ontogeny_mcp_credentials',$index,false);
+        $rows=self::rows();if($rows===null)return;
+        $now=time();
+        foreach($rows as $row){
+            $record=self::decodeRecord($row['option_value']);
+            if($record===null||$record['expires']>$now)continue;
+            // Compare the exact observed record: never delete a changed row on a stale snapshot.
+            $deleted=$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name=%s AND BINARY option_value=BINARY %s",$row['option_name'],$row['option_value']));
+            if($deleted===1)self::invalidate($row['option_name']);
+        }
+        // Legacy index is non-authoritative and safe to discard; no new writes to it.
+        delete_option('ontogeny_mcp_credentials');
     }
     public static function admin():void {
+        global $wpdb;
         if(!current_user_can('manage_options'))return;
-        $index=get_option('ontogeny_mcp_credentials',[]);if(!is_array($index))$index=[];$new='';$notice='';
+        $new='';$notice='';
         if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
             check_admin_referer('ontogeny_mcp_admin');
             if(isset($_POST['issue'])){
-                $email=sanitize_email(wp_unslash($_POST['email']??''));
-                if(!is_email($email)||empty($_POST['verified']))$notice='Verify ownership of the reply email before issuing a credential.';
-                else{ $token='omcp_'.bin2hex(random_bytes(32));$id=hash('sha256',$token);$record=['email'=>$email,'expires'=>time()+30*86400,'verified'=>true];
-                    if(add_option(self::TOKEN_PREFIX.$id,$record,'',false)){$index[$id]=$record;update_option('ontogeny_mcp_credentials',$index,false);$new=$token;$notice='Credential issued. Copy it now and share it securely with the verified correspondent.';}else{$notice='Credential could not be stored.';}
+                $email=is_string($_POST['email']??null)?sanitize_email(wp_unslash($_POST['email'])):'';
+                if((new self())->recipient()===null)$notice='Correspondence is disabled. Configure the mail recipient before issuance.';
+                elseif(!is_email($email)||($_POST['verified']??null)!=='1')$notice='Verify ownership of the reply email before issuing a credential.';
+                else{
+                    $token='omcp_'.bin2hex(random_bytes(32));$id=hash('sha256',$token);$name=self::key($id);
+                    $record=['email'=>$email,'expires'=>time()+30*86400,'verified'=>true];
+                    // A plain unique-key insert cannot replace an existing credential.
+                    $inserted=$wpdb->insert($wpdb->options,['option_name'=>$name,'option_value'=>serialize($record),'autoload'=>'no'],['%s','%s','%s']);
+                    if($inserted===1){self::invalidate($name);delete_option('ontogeny_mcp_credentials');$new=$token;$notice='Credential issued. Copy it now and share it securely with the verified correspondent.';}
+                    else{$notice='Credential could not be stored.';}
                 }
-            }elseif(isset($_POST['revoke'])){$id=sanitize_text_field(wp_unslash($_POST['revoke']));if(preg_match('/^[a-f0-9]{64}$/D',$id)){delete_option(self::TOKEN_PREFIX.$id);unset($index[$id]);update_option('ontogeny_mcp_credentials',$index,false);$notice='Credential revoked.';}}
+            }elseif(isset($_POST['revoke'])){
+                $id=is_string($_POST['revoke'])?wp_unslash($_POST['revoke']):'';
+                if(preg_match('/^[a-f0-9]{64}$/D',$id)){
+                    $name=self::key($id);$deleted=$wpdb->delete($wpdb->options,['option_name'=>$name],['%s']);
+                    if($deleted===false){$notice='Credential revocation failed. Treat the credential as potentially active.';}
+                    else{self::invalidate($name);delete_option('ontogeny_mcp_credentials');$notice=$deleted===1?'Credential revoked.':'Credential already absent.';}
+                }
+            }
         }
-        echo '<div class="wrap"><h1>ONTOGENY MCP / 0.1.0</h1><p>Restricted correspondence pilot. Public reads require no credential. Issue tokens only after independently verifying ownership of the reply address. Tokens expire after 30 days. No WordPress administration rights are granted.</p>';
+        $rows=self::rows();
+        echo '<div class="wrap"><h1>ONTOGENY MCP / 0.1.1</h1><p>Restricted correspondence pilot. Public reads require no credential. Issue tokens only after independently verifying ownership of the reply address. Tokens expire after 30 days. No WordPress administration rights are granted.</p>';
         if($notice)echo '<p>'.esc_html($notice).'</p>';if($new)echo '<p><code>'.esc_html($new).'</code></p>';
         echo '<form method="post">';wp_nonce_field('ontogeny_mcp_admin');echo '<p><label>Verified reply address <input type="email" name="email" required maxlength="254"></label></p><p><label><input type="checkbox" name="verified" value="1" required> I independently verified ownership of this address.</label></p><button class="button button-primary" name="issue" value="1">Issue scoped credential</button></form><h2>Issued credentials</h2>';
-        foreach($index as $id=>$row){echo '<form method="post"><p>'.esc_html($row['email']).' — expires '.esc_html(gmdate('Y-m-d',$row['expires'])).' ';wp_nonce_field('ontogeny_mcp_admin');echo '<button class="button" name="revoke" value="'.esc_attr($id).'">Revoke</button></p></form>';}
+        if($rows===null)echo '<p>Credential storage unavailable. Credential status could not be determined.</p>';
+        else foreach($rows as $row){
+            $id=substr($row['option_name'],strlen(self::TOKEN_PREFIX));$record=self::decodeRecord($row['option_value']);
+            $label=$record===null?'Invalid credential record':$record['email'].' — '.($record['expires']<=time()?'expired ':'expires ').gmdate('Y-m-d',$record['expires']);
+            echo '<form method="post"><p>'.esc_html($label).' ';wp_nonce_field('ontogeny_mcp_admin');echo '<button class="button" name="revoke" value="'.esc_attr($id).'">Revoke</button></p></form>';
+        }
         echo '</div>';
     }
 }
