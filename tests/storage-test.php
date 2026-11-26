@@ -4,6 +4,8 @@
 require_once __DIR__.'/../src/Server.php';require_once __DIR__.'/../src/WordPressBackend.php';
 use Ontogeny\Mcp\WordPressBackend;
 define('ONTOGENY_MCP_MAIL_RECIPIENT','recipient@example.org');
+define('ONTOGENY_MCP_SIGNING_KEY',str_repeat('ab',32));
+function quotaSign(string $payload):string{return hash_hmac('sha256',$payload,wp_salt('auth').'|ontogeny-mcp-v0.2.0');}
 function is_email($v){return filter_var($v,FILTER_VALIDATE_EMAIL);}
 function wp_salt($s){return 'fixture-only-salt';}
 final class MemoryDb {
@@ -11,7 +13,8 @@ final class MemoryDb {
  function prepare($q,...$a){return [$q,$a];}
  function get_var($p){[$q,$a]=$p;$this->last_error=$this->fail?'fixture failure':'';return $this->fail?null:($this->rows[$a[0]]['state']??null);}
  function query($p){[$q,$a]=$p;if($this->fail){$this->last_error='fixture failure';return false;}$this->last_error='';
-  if(str_starts_with($q,'INSERT IGNORE')){[$key,$exp]=$a;if(isset($this->rows[$key]))return 0;$this->rows[$key]=['state'=>str_contains($q,"'quota'")?'quota':'pending_unknown','counter'=>0,'expires'=>$exp];return 1;}
+  if(str_starts_with($q,'INSERT IGNORE')){[$key,$exp]=$a;if(isset($this->rows[$key]))return 0;$this->rows[$key]=['state'=>str_contains($q,"'throttle'")?'throttle':(str_contains($q,"'quota'")?'quota':'pending_unknown'),'counter'=>0,'expires'=>$exp];return 1;}
+  if(str_contains($q,'SET counter=CASE')){[$now,$same,$end,$key,$check,$max]=$a;if($now!==$same||$now!==$check)throw new LogicException('Inconsistent fixture clock');if(!isset($this->rows[$key])||$this->rows[$key]['state']!=='throttle')return 0;$row=&$this->rows[$key];if($row['expires']<=$now){$row['counter']=1;$row['expires']=$end;return 1;}if($row['counter']>=$max)return 0;$row['counter']++;return 1;}
   if(str_starts_with($q,'UPDATE')){[$key,$max]=$a;if(!isset($this->rows[$key])||$this->rows[$key]['counter']>=$max)return 0;$this->rows[$key]['counter']++;return 1;}
   throw new LogicException('Unknown SQL in fixture');
  }
