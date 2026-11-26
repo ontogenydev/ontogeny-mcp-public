@@ -7,6 +7,7 @@ final class Fake implements Backend {
     public array $states=[];public array $sent=[];public bool $fail=false;public int $limit=2;
     public bool $enabled=true;
     public function sendEnabled():bool{return $this->enabled;}
+    public function admit(string $kind):string{return 'allowed';}
     public function sign(string $payload):string{return hash_hmac('sha256',$payload,'test-only-key');}
     public function reserve(string $id,string $attempt):string{if(isset($this->states[$attempt]))return $this->states[$attempt];if(count($this->sent)>=$this->limit)return $this->states[$attempt]='rate_limited';$this->states[$attempt]='pending_unknown';return 'reserved';}
     public function mail(string $reply,string $subject,string $message):bool{$this->sent[]=[$reply,$subject,$message];return !$this->fail;}
@@ -16,7 +17,7 @@ $b=new Fake();$s=new Server($b);$h=['content-type'=>'application/json','accept'=
 function check(bool $ok,string $label):void{global $n;if(!$ok){fwrite(STDERR,"FAIL $label\n");exit(1);}echo 'PASS '.(++$n)." $label\n";}
 function rpc(string $method,array $p=[],array $headers=[]):array{global $s,$h;return $s->http('POST',$headers+$h,json_encode(['jsonrpc'=>'2.0','id'=>1,'method'=>$method,'params'=>(object)$p]));}
 function calltool(string $name,array $args=[],array $headers=[]):array{$r=rpc('tools/call',['name'=>$name,'arguments'=>(object)$args],$headers);$out=$r['body']['result']??[];return isset($out['content'])?json_decode($out['content'][0]['text'],true):$r['body'];}
-$r=rpc('initialize',['protocolVersion'=>'2025-11-25','capabilities'=>(object)[],'clientInfo'=>(object)['name'=>'test','version'=>'1']]);check($r['body']['result']['serverInfo']['version']==='0.2.0','initialize version');
+$r=rpc('initialize',['protocolVersion'=>'2025-11-25','capabilities'=>(object)[],'clientInfo'=>(object)['name'=>'test','version'=>'1']]);check($r['body']['result']['serverInfo']['version']==='0.2.1','initialize version');
 $r=rpc('initialize',['protocolVersion'=>'2026-07-28','capabilities'=>(object)[],'clientInfo'=>(object)['name'=>'test']]);check($r['body']['result']['protocolVersion']==='2025-11-25','negotiate supported revision');
 $r=$s->http('POST',$h,'{"jsonrpc":"2.0","method":"notifications/initialized"}');check($r['status']===202&&$r['body']===null,'notification empty 202');
 check($s->http('GET',$h,'')['status']===405,'GET no SSE');check($s->http('DELETE',$h,'')['status']===405,'DELETE unsupported');check($s->http('GET',['origin'=>'https://attacker.example'],'')['status']===403,'reject foreign origin');check($s->http('POST',['origin'=>'null']+$h,'{}')['status']===403,'reject null origin');check($s->http('POST',['origin'=>'https://ontogenyai.com']+$h,'{')['status']===400,'parse error');check($s->http('POST',$h,str_repeat('x',32769))['status']===413,'size limit');check($s->http('POST',['content-type'=>'text/plain']+$h,'{}')['status']===415,'content type');check($s->http('POST',['accept'=>'application/json']+$h,'{}')['status']===406,'accept validation');check(rpc('ping',[],['mcp-protocol-version'=>'invalid'])['status']===400,'revision validation');check(rpc('ping')['body']['result'] instanceof stdClass,'ping');check($s->http('POST',$h,'[]')['status']===400,'reject batch');check(rpc('admin/delete')['body']['error']['code']===-32601,'reject administrative method');
@@ -34,7 +35,7 @@ check(calltool('send_correspondence',$send+['to'=>'elsewhere@example.org'])['err
 check(calltool('prepare_correspondence',array_replace($draft,['reply_email'=>"x@example.org\r\nBcc: evil@example.org"]))['error']==='invalid_reply_email','reply header injection blocked');
 check(calltool('prepare_correspondence',array_replace($draft,['reply_email'=>'nonsense']))['error']==='invalid_reply_email','invalid reply blocked');
 check(calltool('prepare_correspondence',array_replace($draft,['reply_email'=>null]))['error']==='invalid_reply_email','null reply blocked');
-$nonce=str_repeat('a',32);$expired=time()-1;$ticket=$expired.'.'.$nonce.'.'.$b->sign(json_encode(['v0.2.0',$draft['reply_email'],$draft['subject'],$draft['message'],$nonce,$expired],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+$nonce=str_repeat('a',32);$expired=time()-1;$ticket=$expired.'.'.$nonce.'.'.$b->sign(json_encode(['v0.2.1',$draft['reply_email'],$draft['subject'],$draft['message'],$nonce,$expired],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
 check(calltool('send_correspondence',array_replace($send,['ticket'=>$ticket]))['error']==='expired_or_modified_draft','expired signed ticket blocked');
 $expiry=time()+500;$old=$expiry.'.'.$nonce.'.'.$b->sign(json_encode([hash('sha256','old'),$draft['reply_email'],$draft['subject'],$draft['message'],$nonce,$expiry],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
 check(calltool('send_correspondence',array_replace($send,['ticket'=>$old]),$auth)['error']==='expired_or_modified_draft','old credential-bound ticket rejected');

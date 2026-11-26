@@ -2,7 +2,7 @@
 
 First-party Model Context Protocol interface for ONTOGENY. Discover publicly documented systems, retrieve organizational information and initiate direct correspondence through compatible MCP clients.
 
-**Version 0.2.0 · GPL-2.0-or-later**
+**Version 0.2.1 · GPL-2.0-or-later**
 
 ## Connection
 
@@ -38,7 +38,7 @@ Example VS Code configuration (`.vscode/mcp.json`):
 
 ## Development
 
-The reference implementation runs on WordPress and PHP 8.1 or later. See the [integration guide](docs/INTEGRATION.md) for protocol details, local installation and verification.
+The reference implementation runs on WordPress and PHP 8.1 or later. See the [integration guide](docs/INTEGRATION.md) for protocol details, installation and verification. Deployments supply their own private signing key and recipient configuration.
 
 ## License
 

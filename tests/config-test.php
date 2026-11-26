@@ -6,11 +6,12 @@ require_once __DIR__.'/../src/WordPressBackend.php';
 use Ontogeny\Mcp\WordPressBackend;
 $mode=$argv[1]??'parent';
 if($mode==='parent'){
- foreach(['unset','empty','invalid','newline','valid','disabled','invalid-switch'] as $case){passthru(escapeshellarg(PHP_BINARY).' '.escapeshellarg(__FILE__).' '.escapeshellarg($case),$status);if($status!==0)exit($status);}
- echo "14 configuration checks passed; no real mail sent.\n";exit(0);
+ foreach(['unset','empty','invalid','newline','valid','disabled','invalid-switch','missing-key','bad-key'] as $case){passthru(escapeshellarg(PHP_BINARY).' '.escapeshellarg(__FILE__).' '.escapeshellarg($case),$status);if($status!==0)exit($status);}
+ echo "18 configuration checks passed; no real mail sent.\n";exit(0);
 }
-$modes=['empty'=>'','invalid'=>'not-an-address','newline'=>"recipient@example.org\r\nBcc: other@example.org",'valid'=>'recipient@example.org','disabled'=>'recipient@example.org','invalid-switch'=>'recipient@example.org'];
+$modes=['empty'=>'','invalid'=>'not-an-address','newline'=>"recipient@example.org\r\nBcc: other@example.org",'valid'=>'recipient@example.org','disabled'=>'recipient@example.org','invalid-switch'=>'recipient@example.org','missing-key'=>'recipient@example.org','bad-key'=>'recipient@example.org'];
 if(array_key_exists($mode,$modes))define('ONTOGENY_MCP_MAIL_RECIPIENT',$modes[$mode]);
+if($mode!=='missing-key')define('ONTOGENY_MCP_SIGNING_KEY',$mode==='bad-key'?'invalid':str_repeat('ab',32));
 if($mode==='disabled')define('ONTOGENY_MCP_PUBLIC_SEND_ENABLED',false);
 if($mode==='invalid-switch')define('ONTOGENY_MCP_PUBLIC_SEND_ENABLED','true');
 function is_email($value){return is_string($value)&&filter_var($value,FILTER_VALIDATE_EMAIL)!==false?$value:false;}

@@ -2,10 +2,11 @@
 // Run ONLY via WP-CLI with all ordinary plugins and themes skipped. No mail calls.
 // Uses a connection-local temporary table; never changes the production quota table.
 if(!defined('WP_CLI')||!WP_CLI)exit(1);
-$source=getenv('MCP020_SOURCE');$live=getenv('MCP020_LIVE');
-if(!$source||!$live)throw new RuntimeException('Missing deployment paths');
+$source=getenv('MCP020_SOURCE');
+if(!$source)throw new RuntimeException('Missing fixture source path');
 if(class_exists('Ontogeny\\Mcp\\Server',false))throw new RuntimeException('Old runtime already loaded; stop');
-if(is_file($live.'/config/local.php'))require_once $live.'/config/local.php';
+if(!defined('ONTOGENY_MCP_MAIL_RECIPIENT'))define('ONTOGENY_MCP_MAIL_RECIPIENT','recipient@example.org');
+    if(!defined('ONTOGENY_MCP_SIGNING_KEY'))define('ONTOGENY_MCP_SIGNING_KEY',str_repeat('ab',32));
 require_once $source.'/src/Server.php';require_once $source.'/src/WordPressBackend.php';
 $b=new \Ontogeny\Mcp\WordPressBackend();
 if(!$b->sendEnabled())throw new RuntimeException('Production destination unavailable or public send disabled');
