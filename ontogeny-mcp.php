@@ -4,7 +4,7 @@
 /**
  * Plugin Name: ONTOGENY MCP
  * Description: First-party Model Context Protocol interface for public information and correspondence.
- * Version: 0.2.1
+ * Version: 0.3.0
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  * Requires PHP: 8.1
@@ -36,7 +36,7 @@ add_action('parse_request',static function($wp){
 add_action('rest_api_init',static function(){
     register_rest_route('ontogeny-mcp/v1','/mcp',[
         'methods'=>'GET, POST, DELETE',
-        // The dispatcher deliberately exposes only the six allowlisted tools. Send authorizes independently.
+        // Six allowlisted public tools. Sending enforces draft tickets and quotas.
         'permission_callback'=>'__return_true',
         'callback'=>static function(WP_REST_Request $request){
             $origin=WordPressBackend::canonicalOrigin(home_url('/', 'https'));
@@ -56,7 +56,7 @@ add_action('rest_api_init',static function(){
 add_filter('rest_pre_serve_request',static function($served,$result,$request){
     if(!WordPressBackend::isMcpRoute($request->get_route()))return $served;
     // No cross-origin browser access from arbitrary websites; MCP uses direct HTTP.
-    if(!headers_sent()){foreach(['Access-Control-Allow-Origin','Access-Control-Allow-Credentials','Access-Control-Allow-Headers','Access-Control-Allow-Methods','Access-Control-Expose-Headers','Access-Control-Max-Age'] as $h)header_remove($h);header('Cache-Control: no-store, private',true);header('X-Content-Type-Options: nosniff',true);}
+    if(!headers_sent()){foreach(['Access-Control-Allow-Origin','Access-Control-Allow-Credentials','Access-Control-Allow-Headers','Access-Control-Allow-Methods','Access-Control-Expose-Headers','Access-Control-Max-Age'] as $h)header_remove($h);header('Cache-Control: no-store, private',true);header('X-Content-Type-Options: nosniff',true);if($result->get_status()===405)header('Allow: POST',true);}
     return $served||in_array($result->get_status(),[202,405],true);
 },99,3);
 // Human documentation lives on the dedicated WordPress page, independent of the active theme.

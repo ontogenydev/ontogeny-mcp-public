@@ -2,7 +2,7 @@
 
 First-party Model Context Protocol interface for ONTOGENY. Discover publicly documented systems, retrieve organizational information and initiate direct correspondence through compatible MCP clients.
 
-**Version 0.2.1 · GPL-2.0-or-later**
+**Version 0.3.0 · GPL-2.0-or-later**
 
 ## Connection
 
@@ -33,8 +33,10 @@ Example VS Code configuration (`.vscode/mcp.json`):
 | `list_systems` | Discover publicly documented systems. |
 | `get_system` | Retrieve the StrataDOME dossier. |
 | `get_contact_channels` | Discover correspondence channels. |
-| `prepare_correspondence` | Prepare a message for review. |
-| `send_correspondence` | Submit approved correspondence. |
+| `prepare_correspondence` | Prepare correspondence without transmission. |
+| `send_correspondence` | Transmit prepared correspondence directly to ONTOGENY. |
+
+Clients apply their own authorization policy. When upgrading from 0.2.x, refresh tool discovery, remove the `approved` argument and prepare a new ticket. See [correspondence and outcomes](docs/INTEGRATION.md#correspondence-and-outcomes).
 
 ## Development
 

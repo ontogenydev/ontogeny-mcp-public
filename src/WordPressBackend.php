@@ -92,10 +92,13 @@ final class WordPressBackend implements Backend {
         if($updated===false||$wpdb->last_error!=='')return 'storage_unavailable';
         return $updated===1?'allowed':'rate_limited';
     }
-    private function quota(string $key,int $window,int $limit):bool {
+    private function quota(string $key,int $window,int $limit):string {
         global $wpdb;$t=$this->table();$epoch=intdiv(time(),$window);$bucket=hash('sha256',$key.'|'.$epoch);$expiry=($epoch+1)*$window+86400;
-        if(false===$wpdb->query($wpdb->prepare("INSERT IGNORE INTO $t (bucket, expires, counter, state) VALUES (%s,%d,0,'quota')",$bucket,$expiry)))return false;
-        return 1===$wpdb->query($wpdb->prepare("UPDATE $t SET counter=counter+1 WHERE bucket=%s AND counter<%d",$bucket,$limit));
+        $insert=$wpdb->query($wpdb->prepare("INSERT IGNORE INTO $t (bucket, expires, counter, state) VALUES (%s,%d,0,'quota')",$bucket,$expiry));
+        if($insert===false||$wpdb->last_error!=='')return 'storage_unavailable';
+        $updated=$wpdb->query($wpdb->prepare("UPDATE $t SET counter=counter+1 WHERE bucket=%s AND counter<%d",$bucket,$limit));
+        if($updated===false||$wpdb->last_error!=='')return 'storage_unavailable';
+        return $updated===1?'allowed':'rate_limited';
     }
     public function reserve(string $reply,string $attempt):string {
         if(!$this->sendEnabled())return 'correspondence_unavailable';
@@ -107,31 +110,36 @@ final class WordPressBackend implements Backend {
         // fixed set of keyed source slots so distributed callers cannot create unlimited
         // pre-admission rows. Collisions conservatively share a limit; no raw IP is stored.
         $source=$this->source();$slot=substr($this->quotaSign('admission-source|'.$source),0,2);
-        if(!$this->quota('public-admission-hour-v021-'.$slot,3600,5)||
-           !$this->quota('public-admission-day-v021-'.$slot,86400,10))return 'rate_limited';
         // The shared admission ceiling still bounds reservation and exact-source/address rows.
         // Existing ticket states bypass these counters. Parallel new requests may consume
         // extra admission quota, but unique reservation permits at most one mail handoff.
-        if(!$this->quota('public-attempts-day-v020',86400,200))return 'rate_limited';
+        foreach([['public-admission-hour-v021-'.$slot,3600,5],['public-admission-day-v021-'.$slot,86400,10],['public-attempts-day-v020',86400,200]] as $rule){
+            $state=$this->quota(...$rule);if($state!=='allowed')return $state;
+        }
         $insert=$wpdb->query($wpdb->prepare("INSERT IGNORE INTO $t (bucket, expires, counter, state) VALUES (%s,%d,0,'pending_unknown')",$attempt,time()+86400));
-        if($insert===false)return 'storage_unavailable';
-        if($insert!==1){$state=$wpdb->get_var($wpdb->prepare("SELECT state FROM $t WHERE bucket=%s",$attempt));return is_string($state)?$state:'pending_unknown';}
+        if($insert===false||$wpdb->last_error!=='')return 'storage_unavailable';
+        if($insert!==1){$state=$wpdb->get_var($wpdb->prepare("SELECT state FROM $t WHERE bucket=%s",$attempt));return $wpdb->last_error!==''?'storage_unavailable':(is_string($state)?$state:'pending_unknown');}
         // Preserve existing exact-source and address quota counters across the upgrade.
         $address=$this->quotaSign('reply|'.strtolower($reply));
-        if(!$this->quota('public-source-hour-'.$source,3600,5)||!$this->quota('public-source-day-'.$source,86400,10)||
-           !$this->quota('public-address-hour-'.$address,3600,2)||!$this->quota('public-address-day-'.$address,86400,5)||
-           !$this->quota('global-day',86400,20)){
-            $wpdb->update($t,['state'=>'rate_limited'],['bucket'=>$attempt]);return 'rate_limited';
+        foreach([['public-source-hour-'.$source,3600,5],['public-source-day-'.$source,86400,10],['public-address-hour-'.$address,3600,2],['public-address-day-'.$address,86400,5],['global-day',86400,20]] as $rule){
+            $state=$this->quota(...$rule);
+            if($state==='allowed')continue;
+            $updated=$wpdb->update($t,['state'=>$state],['bucket'=>$attempt,'state'=>'pending_unknown']);
+            return $updated===1&&$wpdb->last_error===''?$state:'storage_unavailable';
         }
         return 'reserved';
     }
     public function mail(string $reply,string $subject,string $message):bool {
-        if(!$this->sendEnabled()||strlen($reply)>254||!is_email($reply)||preg_match('/[\x00-\x20\x7f]/',$reply))return false;
+        if(!$this->sendEnabled()||!Server::validReplyEmail($reply))return false;
         $recipient=$this->recipient();if($recipient===null)return false;
         // Never send verification/confirmation to a visitor or put an unverified address in headers.
         return (bool)wp_mail($recipient,$subject,"Claimed reply email (unverified): $reply\nSource: ONTOGENY MCP\n\n$message",['Content-Type: text/plain; charset=UTF-8']);
     }
-    public function finish(string $attempt,bool $accepted):void {global $wpdb;$wpdb->update($this->table(),['state'=>$accepted?'already_accepted':'previous_handoff_failed'],['bucket'=>$attempt]);}
+    public function finish(string $attempt,bool $accepted):void {
+        global $wpdb;
+        $updated=$wpdb->update($this->table(),['state'=>$accepted?'already_accepted':'previous_handoff_failed'],['bucket'=>$attempt,'state'=>'pending_unknown']);
+        if($updated!==1||$wpdb->last_error!=='')throw new \RuntimeException('Mail outcome storage unavailable');
+    }
     public static function cleanup():void {
         global $wpdb;$t=$wpdb->prefix.'ontogeny_mcp_limits';$wpdb->query($wpdb->prepare("DELETE FROM $t WHERE expires < %d",time()));
         // Legacy credential records are inert; preserve the v0.1.1 compare-and-delete expiry
@@ -149,7 +157,7 @@ final class WordPressBackend implements Backend {
     }
     // Only fixed categories are stored. No request IDs, payloads, credentials,
     // IP addresses or exceptions. High-volume rejection counters are sampled.
-    private const EVENTS=['origin_rejected','request_limited','storage_unavailable','internal_error','mail_accepted','mail_failed','send_limited','replay_blocked'];
+    private const EVENTS=['origin_rejected','request_limited','storage_unavailable','internal_error','mail_accepted','mail_failed','mail_uncertain','send_limited','replay_blocked'];
     public static function event(array $r):?string {
         $status=$r['status']??0;
         if($status===403)return 'origin_rejected';
@@ -168,14 +176,16 @@ final class WordPressBackend implements Backend {
         return match($value['status']??null){
             'accepted_by_mail_service'=>'mail_accepted','mail_handoff_failed'=>'mail_failed',
             'rate_limited'=>'send_limited','storage_unavailable'=>'storage_unavailable',
-            'already_accepted','previous_handoff_failed','pending_unknown'=>'replay_blocked',default=>null};
+            // Initial handoff uncertainty includes delivery_confirmed; reservation replay does not.
+            'pending_unknown'=>($value['delivery_confirmed']??null)===false?'mail_uncertain':'replay_blocked',
+            'already_accepted','previous_handoff_failed'=>'replay_blocked',default=>null};
     }
     private static function eventBucket(string $event,int $day):string{return hash('sha256','mcp-telemetry-v021|'.$event.'|'.$day);}
     public function observe(array $r):void {
         try {
             $event=self::event($r);
             if($event===null)return;
-            if(!in_array($event,['mail_accepted','mail_failed'],true)&&random_int(1,64)!==1)return;
+            if(!in_array($event,['mail_accepted','mail_failed','mail_uncertain'],true)&&random_int(1,64)!==1)return;
             global $wpdb;$t=$this->table();$day=intdiv(time(),86400);
             $key=self::eventBucket($event,$day);$expiry=($day+3)*86400;
             $wpdb->query($wpdb->prepare("INSERT INTO $t (bucket, expires, counter, state) VALUES (%s,%d,1,'telemetry') ON DUPLICATE KEY UPDATE counter=LEAST(counter+1,1000000000)",$key,$expiry));
@@ -192,7 +202,7 @@ final class WordPressBackend implements Backend {
     }
     public static function admin():void {
         if(!current_user_can('manage_options'))return;
-        echo '<div class="wrap"><h1>ONTOGENY MCP / '.esc_html(Server::VERSION).'</h1><p>Public correspondence: '.((new self())->sendEnabled()?'enabled':'disabled').'.</p><h2>Security counters — current UTC day</h2><p>Mail handoffs counted individually; other events sampled 1 in 64. Counters are best effort and not a delivery record.</p>';
+        echo '<div class="wrap"><h1>ONTOGENY MCP / '.esc_html(Server::VERSION).'</h1><p>Public correspondence: '.((new self())->sendEnabled()?'enabled':'disabled').'.</p><h2>Security counters — current UTC day</h2><p>Mail handoff outcomes, including uncertainty, counted individually; other events sampled 1 in 64. Counters are best effort and not a delivery record.</p>';
         $counts=self::eventCounts();
         if($counts===null)echo '<p>Telemetry unavailable.</p>';
         else {echo '<ul>';foreach($counts as $event=>$count)echo '<li>'.esc_html($event).': '.esc_html((string)$count).'</li>';echo '</ul>';}

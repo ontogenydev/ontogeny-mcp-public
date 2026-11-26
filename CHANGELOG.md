@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 — 2026-11-25
+
+- Client-controlled authorization: removes the `approved` argument and mandatory human approval requirement. Refresh tool discovery and prepare new tickets after upgrading.
+- Concise correspondence descriptions across discovery and documentation.
+- Preserve an uncertain outcome when a mail hook throws; retain the receipt and known handoff result if outcome recording fails.
+- Distinguish storage failures from quota exhaustion while continuing to block transmission on either condition.
+- Share reply-address validation between preparation and mail handoff; correct unsupported-method responses to advertise `Allow: POST`.
+- Retain fixed-recipient delivery, ten-minute draft-bound tickets, single-use reservations, existing quota counters, all six tools and three protocol revisions.
+
 ## 0.2.1 — 2026-11-25
 
 - Independent draft signing key, bound to the deployment recipient. Existing tickets must be prepared again after upgrading.
