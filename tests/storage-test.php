@@ -18,7 +18,7 @@ final class MemoryDb {
   if(str_starts_with($q,'UPDATE')){[$key,$max]=$a;if(!isset($this->rows[$key])||$this->rows[$key]['counter']>=$max)return 0;$this->rows[$key]['counter']++;return 1;}
   throw new LogicException('Unknown SQL in fixture');
  }
- function update($t,$fields,$where){$k=$where['bucket'];if(!isset($this->rows[$k]))return 0;$this->rows[$k]=array_replace($this->rows[$k],$fields);return 1;}
+ function update($t,$fields,$where){$k=$where['bucket'];if(!isset($this->rows[$k])||(isset($where['state'])&&$this->rows[$k]['state']!==$where['state']))return 0;$this->rows[$k]=array_replace($this->rows[$k],$fields);return 1;}
 }
 $wpdb=new MemoryDb();$b=new WordPressBackend();$n=0;$i=0;
 function ok($v,$s){global $n;if(!$v)throw new RuntimeException('FAIL '.$s);echo 'PASS '.(++$n)." $s\n";}

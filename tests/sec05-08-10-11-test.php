@@ -51,7 +51,7 @@ $r=callTool('get_organization',[],['mcp-protocol-version'=>'2025-03-26']);ok(!is
 $r=callTool('get_organization',[],['mcp-protocol-version'=>'2025-06-18']);ok(isset($r['body']['result']['structuredContent']),'June revision structured compatibility');
 $tools=array_column(req('tools/list')['body']['result']['tools'],null,'name');ok(count($tools)===6&&!$tools['send_correspondence']['annotations']['idempotentHint']&&!$tools['send_correspondence']['annotations']['readOnlyHint']&&$tools['send_correspondence']['annotations']['destructiveHint'],'send annotations reflect irreversible side effect');
 ok(!$tools['prepare_correspondence']['annotations']['idempotentHint'],'new tickets not presented as idempotent');
-$send=$draft+['ticket'=>$p['ticket'],'approved'=>true];$r=callTool('send_correspondence',array_replace($send,['approved'=>false]));ok(contents($r)['error']==='human_approval_required','structured output does not weaken approval gate');
+$send=$draft+['ticket'=>$p['ticket']];$r=callTool('send_correspondence',$send+['approved'=>false]);ok(contents($r)['error']==='invalid_arguments','structured output rejects removed approval argument');
 $nonce=str_repeat('a',32);$expiry=time()+300;$old=$expiry.'.'.$nonce.'.'.quotaSign(json_encode(['v0.2.0',$draft['reply_email'],$draft['subject'],$draft['message'],$nonce,$expiry],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
 ok(contents(callTool('send_correspondence',array_replace($send,['ticket'=>$old])))['error']==='expired_or_modified_draft','old WordPress-salt ticket invalidated');
 // Exercise the actual REST adapter with minimal WordPress stubs. No actual mail or network.
