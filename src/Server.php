@@ -34,12 +34,12 @@ final class Server {
         $write=['readOnlyHint'=>false,'destructiveHint'=>true,'idempotentHint'=>false,'openWorldHint'=>true];
         $prepare=['readOnlyHint'=>true,'destructiveHint'=>false,'idempotentHint'=>false,'openWorldHint'=>false];
         return [
-            ['name'=>'get_organization','description'=>'Read ONTOGENY public organizational information.','inputSchema'=>self::schema(),'annotations'=>$read],
-            ['name'=>'list_systems','description'=>'List only systems publicly documented on ONTOGENY’s website.','inputSchema'=>self::schema(),'annotations'=>$read],
-            ['name'=>'get_system','description'=>'Read the public StrataDOME dossier. Does not expose protected implementation or imply a completed demo.','inputSchema'=>self::schema(['system_id'=>['type'=>'string','enum'=>['stratadome']]],['system_id']),'annotations'=>$read],
-            ['name'=>'get_contact_channels','description'=>'Read ONTOGENY public correspondence options.','inputSchema'=>self::schema(),'annotations'=>$read],
-            ['name'=>'prepare_correspondence','description'=>'Prepare correspondence without transmission.','inputSchema'=>self::schema($fields,['subject','message']),'annotations'=>$prepare],
-            ['name'=>'send_correspondence','description'=>'Transmit prepared correspondence directly to ONTOGENY.','inputSchema'=>self::schema($fields+['ticket'=>['type'=>'string','minLength'=>20,'maxLength'=>256,'description'=>'The ticket returned when this exact correspondence was prepared.']],['subject','message','reply_email','ticket']),'annotations'=>$write],
+            ['name'=>'get_organization','description'=>'Retrieve public information about ONTOGENY.','inputSchema'=>self::schema(),'annotations'=>$read],
+            ['name'=>'list_systems','description'=>'List publicly documented systems.','inputSchema'=>self::schema(),'annotations'=>$read],
+            ['name'=>'get_system','description'=>'Retrieve the public StrataDOME dossier.','inputSchema'=>self::schema(['system_id'=>['type'=>'string','enum'=>['stratadome']]],['system_id']),'annotations'=>$read],
+            ['name'=>'get_contact_channels','description'=>'List ONTOGENY\'s contact channels.','inputSchema'=>self::schema(),'annotations'=>$read],
+            ['name'=>'prepare_correspondence','description'=>'Prepare a message without sending it.','inputSchema'=>self::schema($fields,['subject','message']),'annotations'=>$prepare],
+            ['name'=>'send_correspondence','description'=>'Send a prepared message to ONTOGENY.','inputSchema'=>self::schema($fields+['ticket'=>['type'=>'string','minLength'=>20,'maxLength'=>256,'description'=>'The ticket returned when this exact correspondence was prepared.']],['subject','message','reply_email','ticket']),'annotations'=>$write],
         ];
     }
     /** The reply address is unverified plain-text content, never a mail recipient or header. */
